@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SQLite Viz</title>
+  <style>
+    body { font-family: sans-serif; margin: 24px; }
+    .row { display: flex; gap: 24px; align-items: flex-start; }
+    .panel { border: 1px solid #d7d7d7; border-radius: 8px; padding: 12px; width: 100%; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #d7d7d7; padding: 6px; text-align: left; font-size: 14px; }
+    button { margin-top: 8px; }
+    .actions { display: flex; gap: 8px; }
+    .muted { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>SQLite Database Visualizer</h1>
+  <p class="muted">Inspect tables, inspect rows, and delete single or multiple tables/rows.</p>
+
+  <label for="dbPath">SQLite DB file path:</label>
+  <input id="dbPath" style="width: 520px;" placeholder="/absolute/path/to/file.sqlite3" />
+  <button id="loadTablesBtn">Load Tables</button>
+
+  <div class="row" style="margin-top: 16px;">
+    <section class="panel">
+      <h2>Tables</h2>
+      <div class="actions">
+        <button id="deleteSelectedTablesBtn">Delete Selected Tables</button>
+      </div>
+      <table id="tablesTable">
+        <thead><tr><th>Select</th><th>Table Name</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2 id="rowsTitle">Rows</h2>
+      <div class="actions">
+        <button id="deleteSelectedRowsBtn">Delete Selected Rows</button>
+      </div>
+      <table id="rowsTable">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </div>
+
+  <script>
+    const dbPathInput = document.getElementById("dbPath");
+    const tablesBody = document.querySelector("#tablesTable tbody");
+    const rowsHead = document.querySelector("#rowsTable thead");
+    const rowsBody = document.querySelector("#rowsTable tbody");
+    const rowsTitle = document.getElementById("rowsTitle");
+    let currentTable = null;
+    let currentSelectors = [];
+
+    async function apiGet(path) {
+      const response = await fetch(path);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || "Request failed");
+      }
+      return response.json();
+    }
+
+    async function apiDelete(path, payload) {
+      const response = await fetch(path, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || "Delete failed");
+      }
+      return response.json();
+    }
+
+    async function loadTables() {
+      const dbPath = dbPathInput.value.trim();
+      if (!dbPath) return alert("Enter a DB path first");
+      const data = await apiGet(`/sqlite-viz/api/tables?db_path=${encodeURIComponent(dbPath)}`);
+      tablesBody.innerHTML = "";
+      data.tables.forEach((tableName) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><input type="checkbox" class="table-checkbox" value="${tableName}"></td>
+          <td>${tableName}</td>
+          <td><button class="view-rows-btn" data-table="${tableName}">View Rows</button></td>
+        `;
+        tablesBody.appendChild(tr);
+      });
+      bindTableButtons();
+      clearRows();
+    }
+
+    function clearRows() {
+      currentTable = null;
+      currentSelectors = [];
+      rowsTitle.textContent = "Rows";
+      rowsHead.innerHTML = "";
+      rowsBody.innerHTML = "";
+    }
+
+    async function loadRows(tableName) {
+      const dbPath = dbPathInput.value.trim();
+      const data = await apiGet(`/sqlite-viz/api/tables/${encodeURIComponent(tableName)}/rows?db_path=${encodeURIComponent(dbPath)}&limit=100`);
+      currentTable = tableName;
+      currentSelectors = data.delete_selectors;
+      rowsTitle.textContent = `Rows: ${tableName}`;
+
+      rowsHead.innerHTML = "";
+      rowsBody.innerHTML = "";
+      const header = document.createElement("tr");
+      const cols = data.columns;
+      header.innerHTML = `<th>Select</th>` + cols.map((c) => `<th>${c}</th>`).join("");
+      rowsHead.appendChild(header);
+
+      data.rows.forEach((row, index) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td><input type="checkbox" class="row-checkbox" data-index="${index}"></td>` +
+          cols.map((c) => `<td>${row[c] ?? ""}</td>`).join("");
+        rowsBody.appendChild(tr);
+      });
+    }
+
+    function bindTableButtons() {
+      document.querySelectorAll(".view-rows-btn").forEach((btn) => {
+        btn.addEventListener("click", () => loadRows(btn.dataset.table));
+      });
+    }
+
+    async function deleteSelectedTables() {
+      const dbPath = dbPathInput.value.trim();
+      const tables = Array.from(document.querySelectorAll(".table-checkbox:checked")).map((x) => x.value);
+      if (tables.length === 0) return alert("Select one or more tables");
+      await apiDelete("/sqlite-viz/api/tables", { db_path: dbPath, tables });
+      await loadTables();
+    }
+
+    async function deleteSelectedRows() {
+      const dbPath = dbPathInput.value.trim();
+      if (!currentTable) return alert("Open a table first");
+      const selected = Array.from(document.querySelectorAll(".row-checkbox:checked"))
+        .map((x) => Number(x.dataset.index));
+      if (selected.length === 0) return alert("Select one or more rows");
+      const selectors = selected.map((index) => currentSelectors[index]);
+      await apiDelete("/sqlite-viz/api/rows", { db_path: dbPath, table: currentTable, selectors });
+      await loadRows(currentTable);
+    }
+
+    document.getElementById("loadTablesBtn").addEventListener("click", async () => {
+      try { await loadTables(); } catch (err) { alert(err.message); }
+    });
+    document.getElementById("deleteSelectedTablesBtn").addEventListener("click", async () => {
+      try { await deleteSelectedTables(); } catch (err) { alert(err.message); }
+    });
+    document.getElementById("deleteSelectedRowsBtn").addEventListener("click", async () => {
+      try { await deleteSelectedRows(); } catch (err) { alert(err.message); }
+    });
+  </script>
+</body>
+</html>

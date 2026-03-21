@@ -1,0 +1,27 @@
+[project]
+name = "django_sqlite3_viz"
+version = "0.1.0"
+description = "Reusable Django app to inspect and mutate local sqlite databases."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "django>=5.1",
+  "django-ninja>=1.3.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["sqlite_viz*"]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3.5",
+  "pytest-django>=4.11.1",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "demo_project.settings"
+python_files = ["test_*.py"]
