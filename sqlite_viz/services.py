@@ -67,10 +67,16 @@ def list_rows(db_path: str, table: str, limit: int = 100, offset: int = 0) -> tu
         columns = row_keys if pk_columns else [k for k in row_keys if k != "rowid"]
         output_rows: list[dict] = []
         selectors: list[dict] = []
+        
+        def _format_value(val: object) -> object:
+            if isinstance(val, bytes):
+                return f"<BLOB: {len(val)} bytes>"
+            return val
+            
         for row in rows:
             as_dict = dict(row)
-            output_rows.append({k: as_dict[k] for k in columns})
-            selectors.append({"values": {col: as_dict[col] for col in selector_cols}})
+            output_rows.append({k: _format_value(as_dict[k]) for k in columns})
+            selectors.append({"values": {col: _format_value(as_dict[col]) for col in selector_cols}})
         return columns, output_rows, selectors
 
 
