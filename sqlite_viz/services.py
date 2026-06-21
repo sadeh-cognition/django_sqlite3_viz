@@ -15,6 +15,48 @@ def _validate_db_path(db_path: str) -> Path:
     return path
 
 
+def browse_directory(path_str: str | None = None) -> tuple[str, str | None, list[dict]]:
+    if not path_str:
+        path = Path.cwd().resolve()
+    else:
+        path = Path(path_str).expanduser().resolve()
+        if not path.exists():
+            # If path doesn't exist, try its parent, or fallback to current directory
+            parent = path.parent
+            if parent.exists() and parent.is_dir():
+                path = parent
+            else:
+                path = Path.cwd().resolve()
+        elif not path.is_dir():
+            # If it's a file, list its parent directory
+            path = path.parent.resolve()
+
+    # Determine parent path
+    parent_path = str(path.parent.resolve()) if path != path.parent else None
+
+    items: list[dict] = []
+    try:
+        for entry in path.iterdir():
+            try:
+                is_dir = entry.is_dir()
+                size = None if is_dir else entry.stat().st_size
+                items.append({
+                    "name": entry.name,
+                    "path": str(entry.resolve()),
+                    "is_dir": is_dir,
+                    "size": size,
+                })
+            except (PermissionError, FileNotFoundError):
+                continue
+    except PermissionError as exc:
+        raise SqliteVizError(f"Permission denied: {path}") from exc
+
+    # Sort: directories first, then files, both alphabetically
+    items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
+
+    return str(path), parent_path, items
+
+
 def _quote_identifier(identifier: str) -> str:
     if not identifier:
         raise SqliteVizError("Identifier cannot be empty")

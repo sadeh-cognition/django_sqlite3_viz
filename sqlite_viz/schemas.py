@@ -29,3 +29,17 @@ class DeleteRowsRequest(Schema):
 
 class DeleteResultResponse(Schema):
     deleted: int
+
+
+class FileItemSchema(Schema):
+    name: str
+    path: str
+    is_dir: bool
+    size: int | None = None
+
+
+class BrowseResponse(Schema):
+    current_path: str
+    parent_path: str | None = None
+    items: list[FileItemSchema]
+

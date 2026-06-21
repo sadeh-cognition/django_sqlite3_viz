@@ -1,13 +1,21 @@
 from ninja import NinjaAPI, Query
 
 from .schemas import (
+    BrowseResponse,
     DeleteResultResponse,
     DeleteRowsRequest,
     DeleteTablesRequest,
     TableListResponse,
     TableRowsResponse,
 )
-from .services import SqliteVizError, delete_rows, delete_tables, list_rows, list_tables
+from .services import (
+    SqliteVizError,
+    browse_directory,
+    delete_rows,
+    delete_tables,
+    list_rows,
+    list_tables,
+)
 
 api = NinjaAPI(urls_namespace="sqlite_viz_api")
 
@@ -52,3 +60,17 @@ def remove_rows(request, payload: DeleteRowsRequest) -> DeleteResultResponse:
     except (SqliteVizError, Exception) as exc:
         return api.create_response(request, {"detail": str(exc)}, status=400)
     return DeleteResultResponse(deleted=deleted)
+
+
+@api.get("/browse", response=BrowseResponse)
+def browse_fs(request, path: str | None = Query(None)) -> BrowseResponse:
+    try:
+        current_path, parent_path, items = browse_directory(path)
+    except SqliteVizError as exc:
+        return api.create_response(request, {"detail": str(exc)}, status=400)
+    return BrowseResponse(
+        current_path=current_path,
+        parent_path=parent_path,
+        items=items,
+    )
+
