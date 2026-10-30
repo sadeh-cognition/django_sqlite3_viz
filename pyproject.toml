@@ -16,6 +16,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["sqlite_viz*"]
 
+[tool.setuptools.package-data]
+sqlite_viz = ["templates/**/*"]
+
 [dependency-groups]
 dev = [
   "pytest>=8.3.5",
